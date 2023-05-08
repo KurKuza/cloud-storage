@@ -1,8 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { CreateFileDto } from './dto/create-file.dto';
-import { FileEntity } from './entities/file.entity';
+import { FileEntity, FileType } from './entities/file.entity';
 
 @Injectable()
 export class FilesService {
@@ -11,11 +10,39 @@ export class FilesService {
     private repository: Repository<FileEntity>,
   ) {}
 
-  create(createFileDto: CreateFileDto) {
-    return 'This action adds a new file';
+  findAll(userId: number, fileType: FileType) {
+    const qb = this.repository.createQueryBuilder('file');
+
+    qb.where('file.userId = :userId', { userId });
+
+    if (fileType === FileType.PHOTOS) {
+      qb.andWhere('file.mimetype ILIKE = :type', { type: 'photos' });
+    }
+
+    if (fileType === FileType.TRASH) {
+      qb.withDeleted().andWhere('file.deleteAt IS NOT NULL');
+    }
+
+    return qb.getMany();
   }
 
-  findAll() {
-    return this.repository.find();
+  create(file: Express.Multer.File, userId: number) {
+    return this.repository.save({
+      filename: file.filename,
+      originalName: file.originalname,
+      size: file.size,
+      mimetype: file.mimetype,
+      user: { id: userId },
+    });
+  }
+
+  async remove(userId: number, ids: string) {
+    const idsArray = ids.split(',');
+
+    const qb = this.repository.createQueryBuilder('file');
+
+    qb.where('id IN (:...ids)', { ids: idsArray, userId });
+
+    return qb.softDelete().execute();
   }
 }
